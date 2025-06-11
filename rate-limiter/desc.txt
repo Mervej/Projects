@@ -1,0 +1,54 @@
+429, too many requests
+
+Benefits - 
+- prevents ddos attack
+- reduce cost for 3rd party downstream apis
+- reduce server load
+
+Quentions - 
+- client or server side
+- limit based on IP, user_id
+- in a distributed service
+- should the user be notified
+
+Requirement -
+- limit req
+- low latency, shouldnt slow down the http apis
+- use little memory as possible
+- distributed rate limiting
+- exception handling
+
+HLD - 
+- where - in middleware(API gateway)
+
+-- algorithms 
+- Token bucket, Leaky bucket, Sliding window counter etc
+
+- Token bucket - This algorithm has a centralized bucket host where you take tokens on each request, and slowly drip
+ more tokens into the bucket. If the bucket is empty, reject the request. Usually implemented using redis.
+    - parameters
+        - bucket size - the max number of tokens allowed in the bucket
+        - refill rate - number of tokens put into the bucket every second
+    - how many buckets 
+        - individual api can need buckets depending upon the configurations
+    - burst traffic
+
+- Leaky bucket algo - Leaky Bucket is a simple and intuitive way to implement rate limiting using a simple first-in, first-out queue (FIFO).
+Incoming requests are appended to the queue and if there is no room for new requests they are discarded (leaked).
+    - parameters
+        - bucket size - queue size, this holds the reqs to be processed at a fixed rate
+        - outflow rate - defines the rate at which reqs are processed, usually in seconds
+    - not good burst req, as flow is periodic
+
+- Sliding window algo, fixed window algo
+
+-- components 
+    data store - to store the rate limiter rules, stored in disk
+    workers - to fetch the rules from disk and store in cache
+    rate-middleware - fetch data from cache and data like timestamps, counter from redis and does the computation where to 
+                process or reject
+
+- challenges 
+    - race condition when using multiple server - use redis lua script to preform atomic operations in redis
+    - centralized redis server
+    

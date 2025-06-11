@@ -1,0 +1,47 @@
+Questions -
+1. DAU ? 1 mil
+2. Any algo for driver matching
+3. Need to handle driver payout - Yes
+4. How much history should be maintained - 5 years
+
+Calculations - 
+DAU - 1 Mil, 1 booking per Day
+QPS = 1M/(24*3600) = 12QPS
+Peak QPS = QPS*2
+Data = 1M * 10kb * 365 * 5
+
+Basics - A city is divided into segments defined by lat,long (depending on population, users etc). A user and a driver will be in a segment.
+
+Apps & Services -
+
+User App -
+    User Service - user login, info, Mysql
+    Trip Service - Cassendra/Mysql, Redis
+    Cab request service(websoscket) - (location, destination) (lat,long), passes on the request to cab finder service
+
+Driver App 
+    Driver Service - Driver login, info
+    Websocket_handler service - connected to a driver, sending info about trip to the driver, sending updated location to location service
+
+Common -
+    Location service - Location server has the data of which drivers are in which segment and vice-versa.
+            - driver hanlder sockets connects with this service and provides updated location for the moving drivers
+            - Redis - segmentSet(S1-D1,D2,D3), driverMapping(D1-S1, D2-S2), cassandra
+            - This talks to map service to fetch get the segment id, cost calculations between start and end
+            - this then check the segment with map service and updates the mapping in redis and cassandra
+            - When drivers for a location is requested, it also finds the drivers in the surrounding segments,return the list to cab finder service
+    
+    Cab Finder Service - Connects with location service to get all near cabs
+            - Then sends the list of drivers and the user to trip service to get the select driver
+            - return the selected driver to cab request service and which updates the data to the user
+            - also get the websocket_handler for the selected driver from websoscket service and send the data to the driver about the teip
+
+    Trip service - This service contains the stores all the trip related data and the algo the select the driver
+            - Mysql - as transcational data(trip details, user detaips, driver details etc), but moves to another db for archival
+            - Check the algo for driver selection on the list of drivers
+            - return the selected driver to cab finder service
+    
+    Websocket service - Contains information about which driver is connected to which websocket_handler and vice-versa.
+            - Redis
+
+    Payment Service - Takes input from trip service and then calulates the amount to be sent to the driver on T+1 

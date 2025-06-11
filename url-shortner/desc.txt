@@ -1,0 +1,39 @@
+Questions - 
+
+1. Lenght of the URL - (16 char)
+2. Will the URL ever expire - No
+3. Custom URL allowed - Yes
+4. How many req per month - 100 mil
+5. Analytics to be provider like most visited url etc
+
+Service/Functional requirements -
+1. should be able to create shortened URL
+2. short url should redirect to the main url
+3. shorted url should be as small as possible
+4. user can create custom url with max lenght - 16
+5. serivce should collect metrics like most clicked
+6. short url created should be there for lifetime
+
+Non functional req -
+1. Service should be up and running all time
+2. Url generation should fast and also redirections
+3. should expose apis to be integrated by 3rd parties
+
+
+Traffic and space req -  
+
+assuming 200:1 read/write ratio
+-no of url gen in 1 month = 100 * 10^6
+-per sec = (100 * 10^6)/(3600*24*30) = 40 
+40*200:40 read/write ratio per sec
+
+Storage - 
+Assuming lifetime - 100 years & size of url(row record) - 500 bytes
+- records = (100*12) * (100 * 10^6)
+- total size = (100*12) * (100 * 10^6) * 500 = 50TB
+
+Caching - 
+80:20 (80% req are for 20% of the data)
+read req per day -> 8000 * 86400 = ~700 mil
+to cache 20% = .2 * 700*10^6 * 500 = 70 gb
+

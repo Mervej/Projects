@@ -1,0 +1,26 @@
+Question -
+1. Queue size
+2. If queue is done, what heppens to the msg
+3. What happens when consumer goes down
+4. Retry mechanism
+5. DLQ?
+6. point to point/pub-sub
+
+Non functional requirements - Scalable, high available, low latency, durable
+
+HLF -
+
+consumer \
+          - load balancer - front service - backend service 
+producer /
+
+Services - 
+
+    - Front service: handle initial req process like req validations,authentications,rate limiting, msg encryption 
+            - Queue metadata - name,created_at,owner etc - connected to metadata database
+            - Cache the most actively used queues 
+    - Backend service: mutliple brokers with queues replicated among these brokers are managed by zookeeper
+            - msg stored in file memory
+
+
+Msg - id, topicName, content, partitionKey

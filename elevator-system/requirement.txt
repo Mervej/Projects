@@ -1,0 +1,8 @@
+Basic requirement - 
+    1. Handles req to move betwen floor - 
+        - move up/down (external)
+        - select floor(internal)
+    2. Manages multiple elevators
+    3. Have states: IDLE, MOVING_UP, MOVING_DOWN, DOORS_OPEN.
+    
+

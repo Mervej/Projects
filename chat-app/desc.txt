@@ -1,0 +1,101 @@
+
+Questions -  1 on 1 or group chat allowews
+    - mobile, web or both
+    - max size of group chat
+    - scale of the system - 50 mil DAU
+    - text, media both?
+    - time of chat history
+
+Requirement -
+1. one on one chat
+2. Group chat
+3. sent, read Ack
+4. Support media files
+5. Chat storage 
+6. push notification to notify offline users of new msg
+
+Non functional req - 
+1. Low latency 
+2. Consistency 
+3. Availabitity and scalibity
+
+Scalibity - 
+    - our scenario 1 M concurrent user 
+    - each user needs 10k memory, total = 10GB
+
+
+Database - Can be divided into two parts 
+    - Generic data - User profile, user friends, settings, followers - relational database
+    - Chat history data - key value stores - easy horizontal scaling, low latency to access data, rel. db dosen't handle very large data well
+        - very large data, read to write ratio 1:1
+        - usually only recent chats are accessed
+        - random serach, jump to specific message
+        
+    msg table - msg_id(bigint), msg_to(bigint), msg_from(bigint), content(text), created_at(timestamp)
+    group msg table - group_id(bigint), msg_id(bigint), user_id(bigint) ,content(text), created_at(timestamp), (group_id, message_id) are composite key.
+
+    msg_id - should be unique, sorted by timestamp(snwoflake id)
+
+
+
+        load         websockets         load            Services                        Database           
+        balancer        handler         balancer       
+app         |           w1-----            |         websocket service                  Redis
+            |                              |         user service                       Mysql, Redis
+mobile      |           w2  /              |         msg service                        Cassendra
+            |                              |         group msg service                  Mysql, Redis
+web         |           w3  /              |         asset service                      CDN, Mysql
+                                                     last seen service(heartbeat)       Cassendra
+                                                     notification service               Mysql
+
+
+Services - 
+
+    - Msg service - Store the msg details into a database 
+
+    - Websocket service(statefull) - clients connect to a handler of this service and sends and receive msg
+            - contains data of which client is conneced to which websocket server and vice versa(redis)
+            
+    - Websocket handler - able to send and receive, webSocket connections are persistent, efficient connection management is critical on the server-side
+
+            1 to 1 msg 
+            - client 1 is connected to this websocket handler
+            - websocket queries to msg service to check if there are any msg for client 1
+            - client 1 send a msg m1 to client 2
+            - this queries to websocket service to find websocket handler for client 2, also send the msg to msg service to store it and mark it as sent
+            - websoceket service find the right websocket_handler of cleint 2 and returns it to websocket_handler client 1
+            - websocket 1 sends the msg to websocket 2 and websocket 2 relays that the msg is delivered to websocket 1
+            - if the recipient is offline or no websocket is connect to client 2, hold the msg untill online
+            - each client maintains a persistent network connection to a chat server
+            - data of client to websocket mapping is also cache at this level
+
+            Group Msg
+            - client 1 - websocket 1 send m1 msg to group g1
+            - webSocket 1 sends the msg to msg service and msg is stored
+            - msg is sent to kafka topic
+
+    - Group Msg service - listens to this kafla topic
+            - fetch from database list of users in the group
+            - fetch all the websocket handlers that are connected to the users
+            - send msg to each user like 1 to 1
+    
+    - Asset service - connected to S3
+            - user device directly connects to this service using loadbalancer and uploads the media file, return image_id
+            - send the image_id as normal msg
+
+    - Service Discovery - Regsiters all chat servers and recommend the best chat server for a client based on the criteria like geographical location, server capacity, etc(ApacheZookeeper)
+    - Auth Service(Stateless) - login
+    - User Service(Stateless) - profile, user
+
+
+
+
+sendMsg(sender_id,receiver_id,type,text,media,docuement)
+getMsg(user_id)
+uploadFile(file_type, file)
+downloadFile(user_id,file_id)
+
+
+connectToserver - Also, we’ll need to recommend the best chat server for a client based on their geo-location, server capacity, etc. 
+Apache Zookeeper is a popular open-source one. It registers all the available chat servers and picks the best chat server for a client based
+ on predefined criteria.

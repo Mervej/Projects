@@ -1,0 +1,72 @@
+Questions - web or app based ?
+    - important features
+    - any specific algpo to show feed like reverse chornological, close friends, topic intersted?
+    - daily traffic 
+    - contain image, videos?
+    - friend suggestion? 
+
+Non fucntional requirement -
+    - Read heavy
+    - Lag is OK, but latency is not
+    - Fast redenring, posting
+    - Access pattern(recent post have most traction)
+
+Data - Divide the users into following segments - active, inactive, passive, famous
+
+                                                                / Asset service          - S3, CDN
+                                                                / User servie            - Mysql, Redis
+                                                                / Post service           - Post Cache - Mongo/Cassendra, Redis
+App -> Load balance -> web servers(Auth and rate limitimg)      - Fan out service        - News Feed Cache - Redis
+                                                                \ Notification service   - 
+                                                                \ Graph service          - Add frined, Graph datasbe(suggests new friends)
+                                                                \ News Feed Service      - News Feed Cache - Redis
+                                                                \ Archival Service       - Move data from redis to another db for older posts
+                                                            
+Servies -
+    Web Server - Besides communicating with clients, web servers enforce authentication and rate-limiting.The system limits the number of posts a user can make within a certain period, vital to prevent spam and abusive content.
+
+    Feed Create Service - 
+        - Fanout Service - Fanout is the process of delivering a post to all friends.
+
+        Algo --
+        - Fan out on write(non famous user) - With this approach, news feed is pre-computed during write time. A new post is delivered to friends’ cache immediately after it is published.
+            Pros: The news feed is generated in real-time and can be pushed to friends immediately.
+                • Fetching news feed is fast because the news feed is pre-computed during write time.
+            Cons: If a user has many friends, fetching the friend list and generating news feeds for all of them are slow and time consuming. It is called hotkey problem.
+                • For inactive users or those rarely log in, pre-computing news feeds waste computing resources
+    
+        - Fan out on read(famous user) -  The news feed is generated during read time. This is an on-demand model. Recent posts are pulled when a user loads her home page.
+            Pros: For inactive users or those who rarely log in, fanout on read works better because it will not waste computing resources on them.
+                • Data is not pushed to all friends so there is no hotkey problem.
+            Cons: Fetching the news feed is slow as the news feed is not pre-computed.
+
+        - Hybrid - For normal user used Fan out on write as fetch will be faster, for large followers users fan out on read to avoid system overload
+
+        Database -- Graph DB to store friend Ids, User database, User cache database
+
+
+APIs - 
+    Feed publishing - POST /v1
+        Params:
+            token: it is used to authenticate API requests.
+            body • content: content is the text of the post.
+
+    Newsfeed building - GET /v1/me/feed
+        Params:
+        token: it is used to authenticate API requests.
+
+
+        1. Fetch friends IDs from graph database
+        2. Get friends data from the user cache, filters out based on user settings like if muted, creator share with only close friends 
+        3. Send post_id, <friend_ids> to msg queue
+        4. Workers fetch data from msg_queue and store in news_feed_data. Sorted set based on post.create_at, struct -> user_id: <post_id, created_at>.
+            -  Memory consumption very large if we store the entire user and post data, only IDs are stored. To keep the memory size small, we set a configurable limit. 
+            The chance of a user scrolling through thousands of posts in news feed is small hence low chance of cache miss
+    
+    Fetch News Feed Service - 
+        - Fetch list of post_ids for the user from news_feed_data
+        - Now its fetch the latest data from the famous user list with timestamp greater then a marked timestamp
+        - It the injects the famous user posts into the feed of the user and update the marked timestamp
+        - Fetch the relative data for post post cache
+        - Return the data is JSON format
+        

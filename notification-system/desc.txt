@@ -1,0 +1,48 @@
+Requirements - Send push, email, msg notification
+
+Questions - what type of notifications
+    - is it realtime or scheduling possible
+    - what triggers notifications
+    - should the user be able to opt out
+    - how many notifications in one day
+    - should notifications be tracked like - opend, clicked etc
+
+Functional Requiements - 
+    - Apples uses APNS(device token, payload)
+    - Android uses FireBase cloud msgng
+    - SMS - Twilio 
+    - EMail - mailchimp, mailgun
+    - Priority of msg
+    - Rate limiting (both of req and client)
+    - Plug and play of any new msg system like in-app, whatsapp
+
+Services -
+    - User service - 
+    - Notification service - 
+    - Template creation service
+
+Algo - 
+    1. Collect used data to send notification on signups
+        - user table(id, name, email, number, country), device table(user_id, device_token, last_logged_in)
+        - cache database - user data, notifications, settings
+    
+    2. HLD -
+        service 1  \                            /  queue -  ios        - APNS
+
+        service 2   - Notification service    -    queue - android     - FireBase
+
+        service 3  /                            \  queue - email, sms  - mailgun
+
+        services - Here services can be micro service, cron job, distributed system that triggers a notification using the noti service
+        notification service - It provides APIs for services 1 to N, carry out basic validations to verify emails, phone numbers, uery the database or cache to fetch data needed to render a notification and builds notification payloads for third party services.
+        thrid party service - Third party services are responsible for delivering notifications to users. Good extensibility means a flexible system that can easily plugging or unplugging of a third-party service.    
+
+        Issues - single notification server single point of failure
+            - preformance bottleneck as processing and sending notifications can be resource intensive. For example, constructing HTML pages and waiting for responses from third party services could take time
+
+        Solutions - Move the database and cache out of notification service
+            - Add more notification servers and set up automatic horizontal scaling.
+            - Put notification data to message queues for parallel processing, one for each system like ios, android, sms, email
+
+
+    3. Relatiability - notification log database persists notification data in a database and implements a retry mechanism

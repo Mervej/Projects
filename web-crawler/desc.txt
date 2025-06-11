@@ -1,0 +1,53 @@
+Requirement - 
+A web crawler starts by collecting a few web pages and then follows links on those pages to collect new content
+    - search engine idexing
+    - web archiving
+    - web monitoring
+
+Questions 
+    - Purpose of the web crawler
+    - What type of contents are included
+    - Do we need to store the web pages
+    - How to handle pages with duplicate content
+
+Non-functional requirements - 
+    - Scalability - no of pages are very large, parallelization
+    - Robustness - web pages are full of trap. bad, unresponsive, mallicious links.
+    - Politeness - shouldn't make too many request for a page
+    - Extensibility - minimum changes to support new content type(add modules after content seen) - link extractor, png downloader, web monitor
+
+Calculations and estimations - 
+    - No of pages per month = 1 bil
+    - Query Per second = 1 bil/(30 days*24hrs*3600secs) = 400 pages per second
+    - Peak QPS*2 = 800
+    - 1 bil pages * 500k(size of 1 webpage) = 500 TB
+    - data stored for 5 years = 500TB * 12 * 5
+
+HLD - 
+    - seed URL -> Url frontier -> html donwloader -> content parser-> content seen?-> link extractor->url filter->url seen?-> back to url frontier
+
+    - seed url - A web crawler uses seed URLs as a starting point for the crawl process. Good seed urlis a good starting points so that many links are traversed. Divide it into smaller once
+        - based on locality - diff country have diff popular sites
+        - based on type - health, shopping etc
+
+    - url frontier - FIFO, stores urls to be donwloaded
+    - html downloader - download content from the webpages, uses dns resolver to translate url to IP
+    - content parser - parse the content and check for malicious pages, but slows donw the overall process
+    - content seen? - compare hash values of two pages as internet is full of duplicate Content, but slows donw the overall process
+    - content storage - most of data stored in disk(db), popular content can be stored in memory
+    - url extractor - extracts urls from the content, converts relative paths into full urls
+    - url filter - excludes urls like file extensions, error links, urls in blacklisted sites
+    - url seen? - is a data structure that keeps track of URLs that are visited before or already in the Frontier. Bool filter and hash tables are common
+    - utl storage - stores all visited urls
+
+Algos - 
+    - For parsing - BFS as in DFS depth can be very large. But a website will have mutliple links of the same domain and a DFS will then trigger multiple requesst causing DDOS(Im-Politeness), to avoid this --
+                - have mutliple FIFO queues that are mapped to a doamin, worker threads picks from one queue, moves to the another and cycle
+            or  - Priority of pages, priority queue as urls are assign a number based on page rank algo(website traffic, update frequency, etc)
+    - Robots.txt, called Robots Exclusion Protocol, is a standard used by websites to communicate with crawlers. It specifies what pages crawlers are allowed to download. Check this before crawling. Cache this file to aviod downloading repeatedly.
+
+Scalability - 
+    - Distributed crawl - crawl jobs are distributed into multiple servers, and each server runs multiple threads. The URL space is partitioned into smaller pieces; so, each downloader is responsible for a subset of the URLs.
+    - DNS Cache - crawl jobs are distributed into multiple servers, and each server runs multiple threads. The URL space is partitioned into smaller pieces; so, each downloader is responsible for a subset of the URLs.
+    - Locality - Distribute crawl servers geographically. When crawl servers are closer to website hosts, crawlers experience faster download time.
+    - Short timeout - If a host does not respond within a predefined time, the crawler will stop the job and crawl some other pages.

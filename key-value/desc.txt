@@ -1,0 +1,25 @@
+Requirement: To store key value pair data(set, get)
+
+Single server key-value store - store in hash tables which keeps everything in memory. Fast fetch but limited memory. Optimizations -
+    - Data compression
+    - store only freq used data on memory, rest on disk
+    - still not sufficient, hence
+
+Distributed key-value store - also known as distributed hash table stores key-value across multiple server
+    - CAP theorem - not possible to provide all three 
+        - consistency - same data in all nodes
+        - availability - data present even in some nodes are down
+        - partition tolerance - system continues to operate despite network partitions(comm breakdown betwn 2 nodes)
+        - choose CP or AP as P is unavoidable due to system network issue
+        - CP - if n3 is unreachable, stop availability so not to return stale data from n3
+        - CA - if n3 is unreachable, return stale data from n3 to keep app running
+
+    - Data partitioning - using consistent hashing
+    - Data replication - 
+    - Inconsistency handling - using vertorclock
+    - Handling failure - 
+
+
+
+
+

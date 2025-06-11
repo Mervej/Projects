@@ -1,0 +1,42 @@
+Question -
+1. DAU ? - 5 million
+2. Average time spend - 30 minutes.
+3. Video resultions and types, hardware types supported 
+4. Is encryption required?
+5. Any file size requirement for videos? - 10GB
+6. Can we leverage some of the existing cloud infrastructures provided by Amazon
+
+Calutaions - 
+5M DAU, 1 user watches 5 videos 
+10% of users upload 1 video per day with average video size is 300 M
+Daily storage - 5M * 10% * 300MB = 150TB
+CDN Cost - changes on bytes transferred - avg 0.2$
+Cost per day = 5 million * 5 videos * 0.3GB * $0.02 = $150,000
+
+Divide components into -
+Production house - uploads videos
+Client - Device on which video is streamed
+User - User logged in the device
+
+Video support for mutliple hardware deivce, diff screen size, interned bandwidth
+i types of devices(encoding), j types of screen size(aspect ratio), k bandwidth(pixels)
+= i * j * k video combinations for a video
+
+Adaptive Bitrate - Client fetchs the video on chuck and depending on the connection the video type is requested, changes realtime
+
+Services - 
+
+Production house - File uploaded to SFTP server 
+    - Asset Onboarding service - read from the sftp server and updates the metadata to asset database via Asset service - Cassendra
+    - Content processor - splits into chucks, run check like piracy etc on the chucks, encodes for varios format, quality and uploads to S3,CDN
+    - Sends notifications to the prodcution hous and push into a kafka topic
+    - Serach consumer service - Consumes this topic and update the metadata into Elastic Search
+
+User - logins via a client
+    - User service - login, profile, device_id, settings etc - MongoDB, Redis
+    - Aseet Service - Play button trigger this service to fetch the data about the asset and stream the video from the best CDN
+    - Home Screen Serivce - 
+    - Search Serivce - Search for the metadata in Elastic search, checks with user service for age related content
+
+Database -
+    - metadata table - myssql, redis(id, title, size, format, desc, s3 link, cdn links, status, created_at)
