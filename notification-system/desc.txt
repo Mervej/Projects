@@ -29,12 +29,12 @@ Algo -
     2. HLD -
         service 1  \                            /  queue -  ios        - APNS
 
-        service 2   - Notification service    -    queue - android     - FireBase
+        service 2   - LB - Notification service    -    queue - android     - FireBase
 
         service 3  /                            \  queue - email, sms  - mailgun
 
         services - Here services can be micro service, cron job, distributed system that triggers a notification using the noti service
-        notification service - It provides APIs for services 1 to N, carry out basic validations to verify emails, phone numbers, uery the database or cache to fetch data needed to render a notification and builds notification payloads for third party services.
+        notification service - It provides APIs for services 1 to N, carry out basic validations to verify emails, phone numbers, query the database or cache to fetch data needed to render a notification and builds notification payloads for third party services.
         thrid party service - Third party services are responsible for delivering notifications to users. Good extensibility means a flexible system that can easily plugging or unplugging of a third-party service.    
 
         Issues - single notification server single point of failure
