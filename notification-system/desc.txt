@@ -19,19 +19,19 @@ Functional Requiements -
 Services -
     - User service - 
     - Notification service - 
-    - Template creation service
+    - Template service - 
 
 Algo - 
-    1. Collect used data to send notification on signups
+    1. Collect user data to send notification on signups
         - user table(id, name, email, number, country), device table(user_id, device_token, last_logged_in)
         - cache database - user data, notifications, settings
     
     2. HLD -
-        service 1  \                            /  queue -  ios        - APNS
+        service 1  \                                /  queue -  ios        - APNS
 
         service 2   - LB - Notification service    -    queue - android     - FireBase
 
-        service 3  /                            \  queue - email, sms  - mailgun
+        service 3  /                                \  queue - email, sms  - mailgun
 
         services - Here services can be micro service, cron job, distributed system that triggers a notification using the noti service
         notification service - It provides APIs for services 1 to N, carry out basic validations to verify emails, phone numbers, query the database or cache to fetch data needed to render a notification and builds notification payloads for third party services.

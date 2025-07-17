@@ -132,7 +132,6 @@ export class ExpenseService {
             const split = this.splits.get(splitId);
             if (split)
                 this.balanceService.calculateBalance(split, expense);
-
         }
 
         this.expenses.set(id, expense);

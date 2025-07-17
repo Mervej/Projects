@@ -15,27 +15,34 @@ try {
 
     // create an expense 
     const expense1 = expenseService.createExpense(
-        150,
+        1000,
         "test_1",
-        user1.id,
-        [user1.id, user2.id, user3.id],
+        user2.id,
+        [user1.id],
         SplitType.EXACT,
-        [50, 50, 50]
+        [1000]
     )
 
     // create an expense 
     const expense2 = expenseService.createExpense(
-        300,
+        5000,
         "test_2",
-        user2.id,
-        [user1.id, user2.id, user3.id],
+        user3.id,
+        [user2.id],
         SplitType.EQUAL,
         []
     )
 
-    console.log(balanceService.getUserBalances(user1.id))
-    console.log(balanceService.getUserBalances(user2.id))
-    console.log(balanceService.getUserBalances(user3.id))
+    const expense3 = expenseService.createExpense(
+        2000,
+        "test_3",
+        user1.id,
+        [user3.id],
+        SplitType.EQUAL,
+        []
+    )
+
+    balanceService.simplifyDebt()
 }
 catch (err) {
     console.log(err);
