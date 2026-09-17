@@ -1,0 +1,26 @@
+RAG pipeline over 10M+ financial compliance documents that needs to stay updated daily and support auditability
+
+Non functional requirement -
+1. given a past decision (a flagged transaction, a compliance sign-off), reconstruct exactly what the system retrieved and showed at that moment
+2. "what was the governing policy as of March 15th" — even if no one actually queried the system on that date
+
+
+- Ingestion and the document/chunk model
+    - At 10M+ documents we're not chunking with a fixed token window; we're parsing document structure like regulations, internal policies, contract template
+    this means the ingestion pipeline needs format-specific parsers where every chunk carries its full structural path as metadata
+    - For versioning is append only, no deleting of previous versions (document_id, version_id, effective_start, effective_end timestamp)
+    - 10M+ documents, chunked at maybe 10–50 chunks each, puts you in the 100M–500M chunk which rules out a naive single-node vector index
+    - shard the vector index by a combination of jurisdiction and document category
+    - parse document → chunk along structural boundaries → embed each chunk → write vector + metadata to the vector store
+    - the embedding vector, document_id, version_id, structural path, content hash, embedding_model_version, and effective date
+
+
+- Daily ingestion 
+    - structure this as a change-detection-driven incremental pipeline rather than a full reindex 
+    - using content hashing to detect new, changed, or withdrawn documents — keyed by document_id + path
+
+
+- Audit log 
+    - Every retrieval call writes an immutable record 
+    - query (or a hash query if sensitive), chunk IDs and version IDs returned, relevance scores, embedding model version and index snapshot identifier,
+     re-ranker version, timestamp, and the requesting service or user identity

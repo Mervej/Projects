@@ -1,0 +1,48 @@
+Functional requirement -
+    - On PR open, the system pulls the diff + enough surronding context
+    - Retrieves the policy documents that are actually relevant (not all of them)
+    - Evaluates the diff against those policies & posts feedback back as PR comments — ideally inline
+
+Non functional requirement -
+    - Every flagged issue needs to be traceable to a source document and a model reasoning trace (audit requirement)
+    - The system cannot send proprietary code to a third-party API outside the firm's security boundary
+    - Human must remain the actual gate for merge-blocking decisions
+    - Models need to run inside the firm's security boundary private deployment or contracted enterprise endpoint, no code in third-party
+    - Processing should be async off the webhook (queue + workers) so PR authors aren't blocked on a slow agent loop; 
+        target posting feedback within a few minutes, not real-time
+    - Idempotency keyed on PR + commit SHA so re-runs on push don't duplicate comments
+
+
+HLD - event-driven pipeline, not a single LLM call
+    - PR webhook(github/bitbucket)
+    - ingestion & context builder - retrieval can be a separate pipeline, policy docs at a bank are versioned
+        - policy docs are embedded and stored in a vector DB alongside metadata(policy ID,version,effective date,business unit applicability)
+        - re-index on every policy update with a changelog
+        - first classify the diff into categories (auth changes, data handling, crypto, third-party calls, infra-as-code) using a cheap 
+        classifier or rules, then retrieve policy chunks scoped to those categories, then do semantic re-ranking within that scoped set
+
+    - parallel compliance layer (deterministic scanners + retrieval-augmented LLM agent ) 
+        - split it into deterministic scanners plus an LLM agent rather than handing everything to one agent
+        - most "compliance" in a bank's code review is actually deterministic — hardcoded secrets, disallowed crypto libraries, missing
+         encryption-at-rest annotations, license violations in dependencies, PII fields without masking. That's a job for SAST/SCA tools 
+         fast, cheap, zero hallucination risk
+        - The LLM agent's job is reading comprehension of policy text and judgment about intent
+        - avoid a single freeform agent loop here in favor of a constrained, tool-calling pipeline
+
+    - aggregator/reasoning layer 
+        - input from previous phases - deterministic scanner output (SAST hits, dependency CVEs, secret detection), and from the LLM side,
+         a set of candidate findings each tied to a diff hunk and a retrieved policy clause
+        - aggregator's job is to turn that pile into one coherent, de-duplicated, correctly-prioritized PR review
+            - Deduplication and correlation - remove common issues flagged by both LLM & deterministic
+            - Citation verification - Every LLM-sourced finding carries a policy clause ID and a short quoted basis
+
+    - structured feedback formatter 
+        - Output should be a structured object, not free text: per-finding severity (blocking/advisory/informational), file/line anchor, 
+            policy reference, rationale, and a suggested fix where applicable, plus an overall PR summary
+        - the structured object gets rendered into inline PR comments via the GitHub/Bitbucket mcp tool and a copy goes to an audit store
+         (who/what flagged it, model version, policy version, retrieval set used) so any finding can be reconstructed later
+        -  Severity routing matters: "blocking" findings should require a human compliance reviewer's sign-off rather than auto-blocking
+         the merge the system's role is decision support with full traceability, not autonomous enforcement
+    
+    - PR comment poster - use mcp tool
+

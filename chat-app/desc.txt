@@ -1,5 +1,5 @@
 
-Questions -  1 on 1 or group chat allowews
+Questions -  1 on 1 or group chat allowed
     - mobile, web or both
     - max size of group chat
     - scale of the system - 50 mil DAU

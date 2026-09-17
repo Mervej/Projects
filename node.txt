@@ -1,0 +1,147 @@
+NodeJS - 
+Node.js is a single-threaded runtime environment that runs on Google's V8 JavaScript engine and provides asynchronous I/O capabilities through libuv. It allows
+JavaScript to run outside the browser by exposing operating system APIs such as networking, file system access, timers, child processes, and more.
+
+Node.js uses a single-threaded JavaScript execution model combined with an event loop and non-blocking I/O.
+Async operations like file system access, timers, or network requests are delegated to libuv or the OS. Once completed, their callbacks are queued.
+The event loop continuously checks whether the call stack is empty, and if so, executes pending callbacks.
+This allows Node.js to efficiently handle many concurrent I/O operations without creating a thread per request.
+* Event loop only works when call stack is empty
+
+Even if the call stack becomes empty, Node.js keeps the process alive because pending timers are registered with libuv. The event loop remains active 
+and efficiently waits for timer completion using OS-level event notification mechanisms. Once the timer callback executes and no more pending work exists,
+the process exits
+Callbacks NEVER directly enter stack === Async operation -> Callback Queue -> Event Loop -> Call Stack
+
+Why is JS non blocking => 
+Node.js executes JavaScript on a single main thread using the V8 engine. When an asynchronous API like fs.readFile() or an HTTP request is invoked, 
+Node delegates the work to either the operating system (for networking) or libuv's thread pool (for operations like filesystem access and certain 
+crypto functions). Instead of waiting, the JavaScript thread continues executing other code. When the operation completes, libuv queues the associated 
+callback, and the event loop eventually executes it in the appropriate phase
+
+Concurrency is achieved by delegating asynchronous operations to the operating system for network I/O and to libuv's thread pool for operations like file
+system access, crypto, compression, and some DNS lookups. When those operations complete, libuv queues their callbacks, and the event loop resumes executing
+them on the single JavaScript thread. This event-driven architecture allows Node.js to efficiently handle thousands of concurrent I/O-bound operations
+without creating a thread per request. For CPU-intensive work, you typically use Worker Threads or separate processes to avoid blocking the event loop
+
+Libuv - libuv is what makes Node asynchronous, C++ library built to provide a consistent asynchronous I/O interface across Linux, macOS, and Windows.
+When asynchronous work is initiated, libuv either registers it with the operating system (for networking) or dispatches it to its worker thread pool 
+(for operations such as filesystem access, DNS lookup, compression, and certain crypto APIs). Once the work completes, libuv queues the associated callback
+    
+Thread Pool is a group of worker threads managed by libuv, default 4, can be increased using the UV_THREADPOOL_SIZE environment variable
+Thread Pool - filesystem crypto, dns.lookup(), compression, decompression
+    OS - Netwroking, HTTPS, TCP, WebSocket
+
+Event loop -> is a scheduler, it processes callbacks phase by phase on the JavaScript thread. This design keeps JavaScript non-blocking while efficiently 
+handling large numbers of concurrent I/O operations without requiring one thread per request
+    Timers -> setTimeout, setInterval
+    Pending callbacks -> Internal callbacks, Mostly TCP errors, Rarely used directly
+    Idle/Prepare -> Internal to libuv
+    Poll -> filesystem callbacks, incoming HTTP requests, database responses (through sockets), network callbacks
+    Check -> setImmediate()
+    Close callbacks -> socket.on("close")
+
+Once the event loop cycles finishes, the next cycle doesnt start immediately. It does ->
+    Drain NextTick Queue
+    Drain Promise/Microtask Queue
+    Continue Event Loop
+
+
+Memory -
+                    Node Process Memory
++---------------------------------------------------------+
+|                                                         |
+|  V8 Memory                          Native Memory       |
+| +----------------------------+    +------------------+  |
+| |                            |    |                  |  |
+| | Stack                      |    | Buffers          |  |
+| | Heap                       |    | libuv            |  |
+| | Code Space                 |    | HTTP Parser      |  |
+| | Old Space                  |    | OpenSSL          |  |
+| | Young Space                |    | C++ Objects      |  |
+| | Large Object Space         |    | Thread Pool      |  |
+| |                            |    |                  |  |
+| +----------------------------+    +------------------+  |
+|                                                         |
++---------------------------------------------------------+
+
+Heap vs Stack -
+Heap = Almost everything dynamic(Map,Set,Date,Function objects,Class instances,Promises)
+Stack = function calls, local variables, execution context, primitive values
+
+Why does Buffer allocate outside the V8 heap? Buffers are intended for binary data such as files, network packets, and streams. Storing large binary
+payloads in the V8 heap would increase garbage collection overhead and quickly exhaust the JavaScript heap limit
+
+
+1. What’s the difference between interface and type in TypeScript?
+    - Interfaces can be declared multiple times and TypeScript merges them, but not types
+    - A type can describe unions, primitives, tuples, and mapped types but interface defines object shapes
+
+2. Why is node single threaded?
+Node.js is called single-threaded because all JavaScript code executes on a single main thread managed by the V8 engine. This design avoids synchronization
+issues like race conditions and reduces the overhead of creating and managing many threads. To remain highly concurrent, Node delegates asynchronous work
+to the operating system or libuv's thread pool
+
+3. How can you scale a node js app vertically?
+Vertical scaling means increasing the resources of your existing server (more CPU cores, RAM, faster disk). Since Node.js is single-threaded by default,
+just adding CPU cores doesn't help unless you explicitly use them. By
+    - cluster mode in node - Spawns one worker process per CPU core, sharing the same port using fork. Each worker is a completely separate OS process with
+     its own:
+        - V8 instance
+        - Event loop
+        - Memory heap
+        - libuv thread pool
+    - PM2 - PM2 wraps the Cluster module with monitoring, auto-restart, and zero-downtime reloads
+    - Worker Threads (CPU-Intensive Tasks) 
+        - OS threads inside the same process, share the same memory space (optionally via SharedArrayBuffer) but each has its own V8 isolate and event loop.
+        - For CPU-heavy work (image processing, crypto, data parsing), offload to Worker Threads so the main thread 
+            stays free for I/O.
+
+4. How can you handle concurrency in the API?
+Node.js handles I/O concurrency well via its event loop, but we still need patterns to manage it properly -
+    - Async/Await with Promise.all (Parallel I/O)
+    - Concurrency Limiting - When processing many items, don't fire all requests at once — use a limiter for (db, APIs)
+    - Connection Pooling 
+    - Rate Limiting 
+    - Queue for Heavy Tasks - Decouple slow work from your API response using a job queue
+
+5. How dow you handle concurrency in node 
+    Two concurrent requests hitting the same thing
+    │
+    ├── Shared DB row?
+    │     ├── Simple increment/decrement → Atomic SQL UPDATE ✅
+    │     ├── Complex multi-step logic  → SELECT FOR UPDATE (pessimistic) ✅
+    │     └── Low conflict expected     → Optimistic locking + retry ✅
+    │
+    ├── Shared in-memory state?
+    │     ├── Cache stampede            → Promise deduplication ✅
+    │     └── Counter / flag            → Redis (don't trust in-memory across workers) ✅
+    │
+    └── Across multiple workers/servers?
+        └── Any shared resource       → Redis distributed lock ✅
+
+
+
+6. Aysnc vs concurrency vs parallelism
+Async programming allows Node.js to initiate an operation and continue doing other work without blocking. Concurrency means multiple operations
+can be in progress at once. Parallelism means those operations are actually executing simultaneously, usually across multiple threads or CPU cores. 
+Node's async I/O gives us concurrency, but not necessarily parallel JavaScript execution.
+
+7. How would you find and fix a memory leak in a long-running Node service?
+First I'd confirm whether it's a real leak by monitoring RSS and V8 heap usage over time and looking at memory after GC. If memory continuously grows, 
+I'd take heap snapshots at different points and compare them in Chrome DevTools, focusing on object counts, retained size, and retaining paths. 
+I'd investigate common causes like unbounded caches or queues, event listeners, timers, closures, and unresolved promises. I'd also check external 
+memory and Buffers because RSS can grow without heapUsed growing. Once I identify the retaining reference, I'd fix it, reproduce the same workload, 
+and verify through another set of heap snapshots and memory metrics. Increasing the Node heap would only be a temporary mitigation, not the fix.
+
+8. When would you reach for worker threads vs. child processes vs. clustering in Node?
+CPU-heavy JavaScript? -> Worker Thread
+Need to run Python / ffmpeg / shell / isolated process? -> Child Process
+Need multiple Node HTTP servers? -> Cluster / preferably multiple containers or pods
+
+9. Closures -> A function retaining access to variables from its outer lexical scope even after that outer function has finished executing.
+
+10. Hoisting & TDZ -> Hoisting is the behavior where JavaScript processes declarations during creation of a scope before executing the code. 
+var declarations are hoisted and initialized to undefined, so they can be accessed before the declaration. let and const are also hoisted, 
+but they're not initialized until execution reaches their declaration. The period between entering the scope and initialization is the Temporal Dead Zone, 
+and accessing the variable during that period throws a ReferenceError.

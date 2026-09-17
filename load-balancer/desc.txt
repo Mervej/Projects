@@ -1,0 +1,19 @@
+The Load Balancer (LB) is the entry point for all traffic. Its primary job is to distribute millions of concurrent 
+requests across your fleet of API Gateways so that no single node gets overwhelme, shou
+
+Usually two-tiered setup: Layer 4 - transport (L4) for raw speed, and Layer 7 - application (L7) for smart routing.
+
+Tier 1: Layer 4 (Transport Layer)
+    How it works: It operates at the TCP/UDP level. It does not open or inspect the HTTP request packet. It simply looks at the source IP, destination IP, and port, 
+        then forwards the raw data bytes.
+    Why it's used: It is incredibly fast, consumes minimal CPU, and can handle millions of packets per second. It acts as the front shield, distributing raw traffic 
+        to the Tier 2 load balancers.
+
+Tier 2: Layer 7 (Application Layer)
+    How it works: It terminates the TLS/SSL connection and opens the HTTP packet. It reads headers, cookies, URLs, and JSON payloads.
+    Why it's used: Your rate-limiting logic needs to know who is making the request (e.g., extracting a user ID from a JWT token or reading an X-API-Key header). 
+        The L7 load balancer parses this data and passes it directly to your rate-limiting gateways
+
+Should Handle -
+    Heath checks
+    Curcuit breaker

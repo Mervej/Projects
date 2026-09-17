@@ -15,17 +15,27 @@ Peak QPS = 2*240
 
 Basics -
 
-Block server - Block servers upload blocks/files to cloud storage. 
-        - A file can be split into several blocks, each with a unique hash value, stored in our metadata database
-        - Each block is treated as an independent object and then encrypted and stored in our storage system (S3)
-        - To reconstruct a file, blocks are joined in a particular order. 
+Client - The client divides the file into blocks and calculates a hash for each block. Send the block hashes to the block server
+
+Block server - Block servers upload blocks/files to cloud storage (Client → Block Server → Object Storage (S3))
+        - Receive file chunks/blocks from the client.
+        - Split a large file into blocks.
+        - Compute a hash for each block, e.g. SHA-256.
+        - Check metadata to determine whether that block already exists.
+        - Encrypt the block.
+        - Store the block in S3/object storage.
+        - Store metadata describing how those blocks compose the file.
 
     Algo for block - 
         - For large files that are updated regularly, sending the whole file on each update consumes a lot of bandwidth.
         - Delta sync: When a file is modified, only modified blocks are synced instead of the whole file using a sync algorithm 
+        - The client divides the file into blocks and calculates a hash for each block. During synchronization, the client and server compare block hashes. 
+            Only blocks whose content has changed need to be uploaded.
         - Applying compression on blocks can significantly reduce the data size depending on file types. gzip for text 
 
 Cloud storage(s3) - Stores the block in cloud        
+
+Metadata Service - retrives the block ids for a given file
 
             ------LoadBalaner------
 Web server - auth user, user info, add/uppdate file metadata
@@ -37,10 +47,10 @@ Notification service -
 
 Database -
 user - id, name, email
-file_id - id, name, relative_path, user_id, 
+file_id - file_id,name,owner_id,parent_folder_id,size,created_at,updated_at
 device_id - id, user_id, push_noti_id
 file_version - id, file_id, device_id, version
-block - id, file_version_id, block_data
+block - id, file_id, file_version_id, sequence_number, block_hash
 
 
 Uplod Flow --
@@ -50,7 +60,8 @@ Client 1 - request to api server and block server in parallel
     - notify to client that file is being updated
 
     - block server -> upload content of the file
-    - Block servers chunk the files into blocks, compress, encrypt the blocks, and upload them to cloud storage.        
+    - Client chunks the files into blocks and sends to block server
+    - Block server compress(for text.json.csv), encrypt the blocks(if not s3 encryption), and upload them to cloud storage.
     - Once the file is uploaded, cloud storage triggers upload completion callback. The request is sent to API servers.
     - File status changed to “uploaded” in Metadata DB.
     - Notify the notification service that a file status is changed to “uploaded.
@@ -58,7 +69,7 @@ Client 1 - request to api server and block server in parallel
 
 Download flow --
     - Notification service informs client 2 that a file is changed somewhere else.
-    - Once client 2 knows that new updates are available, it sends a request to fetch metadata tp api server.
+    - Once client 2 knows that new updates are available, it sends a request to fetch metadata to metadata service.
     - API servers call metadata DB to fetch metadata of the changes, metadata returned to client 2
     - it sends requests to block servers to download blocks.
     - Block servers first download blocks from cloud storage.

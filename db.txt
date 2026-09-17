@@ -1,0 +1,150 @@
+DDL - Data defination language - defines the struture of the table
+Databases do not store data as a continuous stream of text. They store data in fixed-size blocks called Pages (usually 8 KB each).
+
+Index - its a saparate data structure that the db maintains alongside our tables to find rows without scanning every row
+Default - B tree, it stores the value in sorted order, A standard index uses a B-Tree (Balanced Tree) structure made of these pages
+    - Root/Internal Pages: Act as a map or directory.
+    - Leaf Pages: hold the actual indexed values and a physical pointer (TID/Tuple ID) to where the real table row lives on the disk
+    
+    CREATE INDEX idx_employee_dept ON employee_department(department_id);
+    Primary Index, Composite index, Partial index
+
+    Drawbacks -
+    Slow writes, storage overhead, wrong index hurts
+    Index bloat -> Index bloat occurs when an index grows significantly larger in disk size than the actual data it points to.
+        When a row is deleted, the row is simply marked  as "dead" (invisible to new transactions). However, the pointers inside your indexes still 
+        point to these dead rows.
+        - Page Splits -> A page split happens when a full index page receives a new row that must be inserted in the middle to maintain sorted order. 
+        The database creates a new page and moves about half the rows to it, leaving both pages partially empty and causing the index to grow much faster
+         than the actual data.
+
+        - Why Bloat Hurts -> Increased Disk I/O, Cache Eviction
+        - VACUUM (often automated as AUTOVACUUM) - scans the tables and indexes for these dead entries and remove those dead pointers and marks 
+            those spots in the index as "reusable" for future INSERT or UPDATE operations, BUT NOT PAGE SPLITS
+        - To physically reverse page splits, collapse empty pages, and shrink the index size on disk, you must bypass a standard vacuum and 
+            explicitly run a REINDEX or VACUUM FULL command
+
+Concurrency & ACID
+Atomicity -> all or nothing, A transaction either commits fully or rolls back fully.
+Consistency ->  data moves from one valid state to another, all constraints (FK, CHECK, NOT NULL) must hold before and after the transaction
+Isolation ->  concurrent transactions don't see each other's intermediate state
+Durability -> committed data survives crashes, Once COMMIT returns, the data is written to disk (Write-Ahead Logging)
+
+For new database like postgres it doesn't use traditional read locks. It uses MVCC (Multi-Version Concurrency Control)
+    - MVCC -> every row has a version, and each transaction sees a snapshot of the DB as it was when the transaction started
+        - readers never block writers, writers never block readers in Postgres. Locks only happen on writes competing with writes.
+        - isolation is handled by snapshots, not locks.
+
+Isolation levels -> read uncomitted, read commited(default), repeatable read, seriazible(phantom read)
+
+read uncomitted -> reading uncommitted data from another transaction (dirty read)
+    Transaction A updates a row but hasn't committed. Transaction B reads that row and sees the new value. A then rolls back. B acted on data that never 
+    existed.
+
+read commited -> prevents dirty reads.
+    Tx A: UPDATE balance to $300 from $500 ← not committed yet
+    Tx B only sees data that has been committed. If Tx A hasn't committed yet, Tx B still sees the old value ($500).
+
+repeatable read -> prevents you from seeing a changed value on a row you already read
+    Tx A (report): READ account balance → $500
+                                          Tx B: UPDATE balance to $300, COMMIT
+    Tx A (report): READ same account again → $300  ← non-repeatable read
+    Tx A reads the same row twice and gets different values because Tx B committed a change in between. 
+    The report is now inconsistent — it used $500 for one calculation and $300 for another on the same account.
+    Repeatable Read fixes this: Tx A's snapshot is frozen at the start of the transaction.
+
+serializable isolation -> highest, strictest isolation level defined by the SQL standard
+     database guarantees that the end result will be exactly the same as if the transactions were executed one after another, completely in sequence 
+     example -> At least one doctor must be active on-call at all times.
+        - Transaction 1 (Doctor A): Checks the database: SELECT COUNT(*) WHERE on_call = true. The count is 2. Safe to leave!
+        - Transaction 2 (Doctor B): Checks the database: SELECT COUNT(*) WHERE on_call = true. The count is 2. Safe to leave!
+        - Transaction 1: Updates status: SET on_call = false WHERE doctor = 'A'. Commits.
+        - Transaction 2: Updates status: SET on_call = false WHERE doctor = 'B'. Commits
+
+    Serializable isolation watches for these hidden relationships, instead of just looking at what rows were changed, it tracks what data was read by
+    an active transaction. If it detects that a concurrent transaction has changed the premises of what another transaction previously read, it steps in
+
+    - SSI (Serializable Snapshot Isolation - Used by PostgreSQL)
+        - pessimistic observation, optimistic execution strategy
+        - It does not lock the rows or block other users from reading
+        - Instead, it creates SIREAD locks (virtual tracking tags) on the rows, pages, or tables you read
+        - If Transaction 2 modifies something that Transaction 1 read, the database flags a "dependency pivot." 
+            If a conflict is confirmed, the database will forcefully terminate one of the transactions with a Serialization Failure error
+
+
+Locks & mutex/semaphores -
+    - shared and exclusive locks protect logical database data (Rows, Pages, Tables)
+    - mutexes and semaphores protect physical hardware and memory structures (RAM addresses, data buffers, internal CPU threads)
+
+    Lock types ->
+    - Pessimistic locking - pessimistic locking prevents conflicts by blocking others
+        -  It slows down the system because threads are forced to wait for locks to clear. It can also lead to deadlocks if two transactions lock resources
+            in a circular order
+        - EX -> 
+            BEGIN;
+            SELECT * FROM seat WHERE id = 42 FOR UPDATE;
+            -- safe to read and update — nobody else can touch this row
+            UPDATE seat SET booked = true WHERE id = 42;
+            COMMIT;
+
+    - Optimistic locking - optimistic locking detects conflicts at the end and rolls back if one occurred
+        -  If conflicts frequently, performance plummets because the system wastes significant processing power repeatedly retrying aborted operation
+        - EX -> 
+            UPDATE seat SET booked = true, version = version + 1
+            WHERE id = 42 AND version = :version_i_read;
+
+    - Shared lock(S) - read lock. Multiple transactions can hold it at the same time.
+    - Exclusive lock(X) - write lock. Only one holder. Blocks all other reads and writes on that resource.
+    - Row-level lock(SELECT FOR UPDATE) - locks specific rows, not the whole table. Other transactions can still read/write other rows freely.
+    - Table-level lock - locks the entire table. Happens on DDL (ALTER TABLE) or explicit LOCK TABLE. Avoid on large prod tables.
+
+
+- mutexes and semaphores are low-level memory synchronization tools used to manage threads
+    - mutex -> strict binary lock used to protect a single, highly sensitive shared database memory. Only one thread can hold a mutex at any given time
+        Example
+            - A CPU thread wants to modify a page sitting in the database's RAM.
+            - It must first "acquire" the mutex for that memory address.
+            - While it holds the mutex, all other threads trying to access that exact memory space are blocked.
+            - Once finished, it releases the mutex so the next thread can use it.
+    - Semaphore -> A semaphore is a counter-based signaling mechanism used to control access to a resource that has a limited, fixed capacity, 
+                or to coordinate tasks between different database processes
+            - Counting Semaphore: It initializes with a specific count (e.g., 5). Every time a thread accesses the resource, the counter drops by 1. 
+                When it hits 0, subsequent threads are forced to sleep until a thread exits and increments the counter back up.
+            - Binary Semaphore: A signaling tool where Process A tells Process B: "I am done with my task, you can wake up and start yours now.
+        Example
+            - In a backend context — a DB connection pool with max 10 connections is a semaphore of value 10. Each request that takes a connection
+             decrements it; releasing increments it. At 0, new requests wait. A mutex is what you'd use to ensure only one worker processes a specific 
+             job at a time.
+
+    [Step 1] DB acquires an EXCLUSIVE LOCK on Row ID 10.
+         (Prevents other transactions from altering this user's balance).
+    [Step 2] DB locates the RAM page where Row 10 is cached.
+    [Step 3] DB acquires a MUTEX on that specific RAM buffer block.
+            (Prevents another CPU thread from corrupting the memory while writing).
+    [Step 4] CPU writes the new balance (50) into RAM.
+    [Step 5] DB instantly RELEASES the MUTEX (Took 5 nanoseconds).
+    [Step 6] Transaction finishes processing.
+    [Step 7] DB RELEASES the EXCLUSIVE LOCK on Row ID 10 upon COMMIT.
+
+
+
+How can you improve data retrieval? Describe each potential solution in details
+ - indexin -
+    - b tree - equal, <,>, between, range, order by
+    - hash - equal only
+    - gin - JSONB, array, Full-text search
+    - partial - A regular B-Tree (or other) index on rows matching a WHERE predicate. Smaller,faster,cheaper as unmatched rows are never indexed
+    - composite - A single index on two or more columns. Column order is critical
+    - covering - includes all columns needed by a query — so the database engine never needs to visit the actual table
+
+ - cahing - set buffer pool to keep hot pages in RAM, Pre-compute and store the result of a complex query as a physical table on MT view, Redis caching
+ - query tuning - explain analyse, Avoiding N+1 queries, Pagination with keyset(id instead of offset)
+ - architecture - Read replicas, Connection pooling, Partitioning for pruning, sharding
+ - schema - denormalization(avoid joins), Data types & alignment(Use the smallest correct type (int4 vs int8, date vs timestamp), 
+
+
+Explain analyze -> 
+    1. Expected vs actual - actual rows count vs setimated count
+    2. Seq or index scan 
+    3. Disk vs. Memory Operations - check if sorts or hashes spill over to disk, external merge Disk
+    4. Loop Counts 
